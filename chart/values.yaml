@@ -1,7 +1,9 @@
 image:
   repository: macro.int.pgmac.net:5000/pg-tremendous-cve
+  # Prefer pinning to an immutable tag/digest in the ArgoCD valuesObject (Renovate-driven).
+  # While tracking the mutable `latest` tag, pullPolicy must be Always to pick up rebuilds.
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 replicaCount: 1
 

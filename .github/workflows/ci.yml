@@ -11,6 +11,11 @@ permissions:
 
 jobs:
   lint-test:
+    # Fork PRs must not run on the internal self-hosted runner (RCE risk).
+    # Only same-repo branches and pushes reach the runner.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 15
     steps:
