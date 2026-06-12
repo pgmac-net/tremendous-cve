@@ -1,0 +1,42 @@
+# Reference ArgoCD Application for tremendous-cve.
+# Copy into the pgk8s app-of-apps repo (e.g. pgmac.net/<group>/templates/) and
+# adjust repoURL/targetRevision. The chart lives in this repo under chart/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tremendous-cve
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tremendous-cve
+  project: default
+  source:
+    repoURL: https://github.com/pgmac/tremendous-cve.git
+    path: chart
+    targetRevision: main
+    helm:
+      valuesObject:
+        image:
+          repository: macro.int.pgmac.net:5000/pg-tremendous-cve
+          # renovate: datasource=docker depName=macro.int.pgmac.net:5000/pg-tremendous-cve registryUrl=macro.int.pgmac.net:5000
+          tag: latest
+        existingSecret: tremendous-cve
+        ingress:
+          enabled: true
+          className: public
+          host: tremendous-cve.int.pgmac.net
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt-prod
+          tls:
+            - hosts:
+                - tremendous-cve.int.pgmac.net
+              secretName: tremendous-cve-tls-cert

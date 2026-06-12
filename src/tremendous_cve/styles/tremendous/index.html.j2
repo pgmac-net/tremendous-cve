@@ -1,0 +1,31 @@
+{% extends "base.html.j2" %}
+{% block title %}TREMENDOUS CVE — The Greatest Vulnerabilities Ever Launched{% endblock %}
+{% block body %}
+<div class="banner">
+  <h1>👑 TREMENDOUS CVE 👑</h1>
+  <p class="tagline">The HUGEST vulnerability launch pages in the history of computing. Probably ever.</p>
+</div>
+<main>
+  {% if metas %}
+  <section>
+    <h2>🚀 OUR PRODUCT CATALOG</h2>
+    <table>
+      <tr><th>Launch</th><th>CVE</th><th>Their score</th><th>Our score</th></tr>
+      {% for meta in metas %}
+      <tr>
+        <td><a href="/cve/{{ meta.cve_id }}">{{ meta.title }}</a></td>
+        <td>{{ meta.cve_id }}</td>
+        <td>{{ meta.cvss_score if meta.cvss_score is not none else 'N/A' }}{% if meta.severity %} ({{ meta.severity }}){% endif %}</td>
+        <td>{{ meta.severity_gag }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% else %}
+  <section>
+    <h2>🚀 NO LAUNCHES YET</h2>
+    <p>Tremendous things are coming. The best things. Believe me.</p>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

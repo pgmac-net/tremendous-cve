@@ -1,0 +1,40 @@
+image:
+  repository: macro.int.pgmac.net:5000/pg-tremendous-cve
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+env:
+  DATA_DIR: /data
+  DEFAULT_MODEL: sonnet
+
+# Secret holding ANTHROPIC_API_KEY and GENERATE_TOKEN, created out-of-band.
+existingSecret: tremendous-cve
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+persistence:
+  enabled: true
+  size: 1Gi
+  # storageClass left unset -> cluster default (hostpath). Pages survive restarts.
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+ingress:
+  enabled: true
+  className: public
+  host: tremendous-cve.int.pgmac.net
+  annotations: {}
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
