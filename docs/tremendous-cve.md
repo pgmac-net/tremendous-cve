@@ -60,6 +60,14 @@ environment. `--upload` reads `--url`/`--token` or `TREMENDOUS_CVE_URL`/`TREMEND
 `ant` is a separate binary — not bundled with the `anthropic` Python SDK or Claude Code.
 Only needed if you authenticate via a Claude subscription rather than an API key.
 
+The repo's `mise.toml` pins `ant` (with `python` and `uv`), so the simplest path is:
+
+```sh
+mise trust && mise install   # installs python, uv, and ant
+```
+
+Without mise, install directly:
+
 ```sh
 # Linux
 VERSION=$(curl -fsSL https://api.github.com/repos/anthropics/anthropic-cli/releases/latest \

@@ -34,7 +34,16 @@ credentials from the environment — `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`
 `ant auth login` profile. If you have an API key, just export it and skip `ant`.
 
 `ant` is the **Anthropic CLI** — a separate binary, not bundled with the `anthropic`
-Python SDK or Claude Code. Install it once to log in with your Claude subscription:
+Python SDK or Claude Code. The repo's `mise.toml` already pins it (along with `python` and
+`uv`), so the simplest path is:
+
+```sh
+mise trust && mise install   # installs python, uv, and ant
+ant auth login               # browser OAuth; profile under ~/.config/anthropic/
+ant auth status              # confirm which credential/workspace won
+```
+
+Without mise, install `ant` directly:
 
 ```sh
 # Linux
@@ -48,9 +57,6 @@ brew install anthropics/tap/ant && xattr -d com.apple.quarantine "$(brew --prefi
 
 # from source (Go 1.22+)
 go install github.com/anthropics/anthropic-cli/cmd/ant@latest
-
-ant auth login    # browser OAuth; profile stored under ~/.config/anthropic/
-ant auth status   # confirm which credential/workspace won
 ```
 
 Caveats:
