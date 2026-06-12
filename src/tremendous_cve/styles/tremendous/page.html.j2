@@ -1,0 +1,76 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ content.title }} — {{ cve.cve_id }}{% endblock %}
+{% block body %}
+<div class="banner">
+  <h1>👑 {{ content.title }} 👑</h1>
+  <p class="tagline">{{ content.tagline }}</p>
+  <p class="marquee">🚨 {{ cve.cve_id }} 🚨 OFFICIAL VULNERABILITY LAUNCH PAGE 🚨</p>
+</div>
+<main>
+  <div class="severity">SEVERITY: {{ content.severity_gag }}</div>
+
+  {% for section in content.sections %}
+  <section>
+    <h2>{{ section.heading }}</h2>
+    {% for para in section.body.split('\n\n') %}
+    <p>{{ para }}</p>
+    {% endfor %}
+    {% if section.code %}
+    <pre>{{ section.code }}</pre>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <section>
+    <h2>📋 THE BORING (BUT 100% REAL) FACTS</h2>
+    <table>
+      <tr><th>CVE</th><td><a href="{{ nvd_url }}">{{ cve.cve_id }}</a></td></tr>
+      {% if cve.cvss_score is not none %}
+      <tr><th>CVSS</th><td>{{ cve.cvss_score }} ({{ cve.severity }}) — a very low-energy score. We rate it {{ content.severity_gag }}.</td></tr>
+      {% endif %}
+      {% if cve.cvss_vector %}
+      <tr><th>Vector</th><td>{{ cve.cvss_vector }}</td></tr>
+      {% endif %}
+      {% if cve.cwe_ids %}
+      <tr><th>Weakness</th><td>{{ cve.cwe_ids | join(', ') }}</td></tr>
+      {% endif %}
+      {% if cve.published %}
+      <tr><th>Published</th><td>{{ cve.published }}</td></tr>
+      {% endif %}
+    </table>
+    {% if cve.references %}
+    <p>References (all TREMENDOUS sources):</p>
+    <ul>
+      {% for ref in cve.references[:8] %}
+      <li><a href="{{ ref }}">{{ ref }}</a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  {% if content.faq %}
+  <section>
+    <h2>❓ FREQUENTLY ASKED QUESTIONS (THE BEST QUESTIONS)</h2>
+    {% for item in content.faq %}
+    <p><strong>Q: {{ item.question }}</strong><br>A: {{ item.answer }}</p>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if content.merch %}
+  <section>
+    <h2>🛒 OFFICIAL MERCHANDISE</h2>
+    <table>
+      <tr><th>Item</th><th>Price</th><th>Availability</th></tr>
+      {% for item in content.merch %}
+      <tr><td>{{ item.item }}</td><td>{{ item.price }}</td><td><span class="soldout">{{ item.status }}</span></td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
+{% block footer %}
+<p>⚠️ This is satire, but <a href="{{ nvd_url }}">{{ cve.cve_id }}</a> is a real vulnerability.
+Read the official NVD entry and patch your systems. ⚠️</p>
+{% endblock %}
