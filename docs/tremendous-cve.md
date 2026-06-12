@@ -5,80 +5,99 @@ the Claude API to produce a parody "product launch" page in the style of
 [bumsrake.de](https://bumsrake.de/) — hyperbolic campaign rhetoric on top, technically
 accurate vulnerability detail underneath.
 
-## Architecture
+## Architecture (split: local CLI + serve-only web app)
+
+Generation runs **locally**, where the operator is authenticated to Claude. The web app
+holds no Claude credentials — it only stores and serves uploaded pages. This keeps a
+short-lived subscription token (or any API key) out of the cluster entirely.
 
 ```
-POST /generate ──> parse CVE ID ──> NVD API 2.0 ──> Claude (JSON) ──> Jinja2 ──> /data
-GET  /cve/{id} ──> serve cached HTML from /data
-GET  /          ──> index of generated pages
+LOCAL (authenticated to Claude):
+  tremendous-cve generate <CVE>
+    → NVD API 2.0 fetch → Claude (structured JSON) → Jinja2 render → HTML
+    → --out (preview)  and/or  --upload → POST /pages
+
+CLUSTER (no Claude credentials):
+  GET /              index of uploaded pages
+  GET /cve/{cve_id}  serve a stored page
+  POST /pages        bearer-token upload (HTML + meta)
+  GET /healthz       liveness/readiness
 ```
 
 The model returns **structured JSON** (title, tagline, sections, severity gag, FAQ, merch),
-never raw HTML — keeping layout consistent and avoiding injection. All output is
-auto-escaped by Jinja2. Every page footer links back to the genuine NVD entry with a
-"this is satire but the vuln is real" disclaimer.
+never raw HTML — keeping layout consistent and avoiding injection. Output is auto-escaped
+by Jinja2. Every page footer links the genuine NVD entry with a "satire but real vuln"
+disclaimer.
 
 ### Modules (`src/tremendous_cve/`)
 
-| Module | Responsibility |
-|---|---|
-| `nvd.py` | CVE ID parsing (URL or bare ID) + NVD API 2.0 client with 403/429 retry |
-| `generator.py` | `PageContent` schema, prompt assembly, Claude call, JSON validation |
-| `render.py` | Jinja2 rendering + `PageStore` (HTML + metadata on disk) |
-| `main.py` | FastAPI routes and bearer-token auth |
-| `config.py` | Env-var settings |
-| `styles/tremendous/` | Persona prompt + base/page/index templates |
+| Module | Responsibility | Used by |
+|---|---|---|
+| `nvd.py` | CVE ID parsing + NVD API 2.0 client (403/429 retry) | CLI |
+| `generator.py` | `PageContent` schema, prompt, Claude JSON call, validation | CLI |
+| `render.py` | Jinja2 rendering, `PageMeta`/`build_meta`, on-disk `PageStore` | CLI + web |
+| `cli.py` | `tremendous-cve generate` — fetch → generate → render → upload | CLI |
+| `main.py` | FastAPI store-and-serve routes + bearer auth | web |
+| `config.py` | Web app env settings (`UPLOAD_TOKEN`, `DATA_DIR`) | web |
+| `styles/tremendous/` | Persona prompt + base/page/index templates | CLI + web |
 
-The `styles/` package is structured so additional personas can be added later as a
-`style` parameter.
+The `styles/` package is structured so additional personas can be added later.
 
-## Routes
+## CLI
+
+```sh
+ant auth login   # one-time; uses your Claude subscription
+tremendous-cve generate <CVE-or-NVD-URL> [--model sonnet|opus] [--out PATH] \
+    [--upload --url <base> --token <token>]
+```
+
+The Claude client is constructed with no arguments, so the SDK resolves
+`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile from the
+environment. `--upload` reads `--url`/`--token` or `TREMENDOUS_CVE_URL`/`TREMENDOUS_CVE_TOKEN`.
+
+## Web app routes
 
 | Route | Auth | Behaviour |
 |---|---|---|
-| `GET /` | public | Index listing generated pages |
-| `GET /cve/{cve_id}` | public | Serve cached page; 404 (in style) if not generated |
-| `POST /generate` | Bearer token | `{"cve": "<url or id>", "model": "sonnet"\|"opus", "force": false}` |
+| `GET /` | public | Index listing uploaded pages |
+| `GET /cve/{cve_id}` | public | Serve a stored page; 404 (in style) if absent |
+| `POST /pages` | Bearer token | `{cve_id, html, meta}` — store an uploaded page |
 | `GET /healthz` | public | Liveness/readiness |
 
 ## Configuration
 
+### Web app
+
 | Env var | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Claude API key |
-| `GENERATE_TOKEN` | — | Bearer token required by `POST /generate` |
-| `DATA_DIR` | `/data` | Storage for rendered pages + metadata |
-| `DEFAULT_MODEL` | `sonnet` | Default model alias (`sonnet` → Sonnet 4.6, `opus` → Opus 4.8) |
+| `UPLOAD_TOKEN` | — | Bearer token required by `POST /pages` |
+| `DATA_DIR` | `/data` | Storage for uploaded pages + metadata |
 
-## Local development
+### CLI
 
-```sh
-uv sync
-uv run pytest
-uv run ruff check
-uv run pylint src/
-ANTHROPIC_API_KEY=... GENERATE_TOKEN=dev DATA_DIR=./data \
-  uv run uvicorn tremendous_cve.main:app --reload
-curl -X POST localhost:8000/generate \
-  -H "Authorization: Bearer dev" \
-  -d '{"cve":"https://nvd.nist.gov/vuln/detail/CVE-2021-44228"}'
-```
+| Env var / flag | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` / `ant auth login` | Claude auth (resolved by the SDK) |
+| `--url` / `TREMENDOUS_CVE_URL` | Web app base URL for `--upload` |
+| `--token` / `TREMENDOUS_CVE_TOKEN` | Upload bearer token (matches `UPLOAD_TOKEN`) |
+| `--model` / `TREMENDOUS_CVE_MODEL` | Claude model alias (default `sonnet`) |
 
 ## Deployment
 
 - **Image:** built in GitHub Actions (`.github/workflows/docker.yml`) via the pvek8s
   remote BuildKit endpoint, pushed to `macro.int.pgmac.net:5000/pg-tremendous-cve`.
+  One image; the CLI is run locally, not in-cluster.
 - **Chart:** `chart/` — Deployment (1 replica, `Recreate` strategy because of RWO PVC),
-  Service, Ingress, PVC (~1Gi), wired to an out-of-band Secret.
+  Service, Ingress, PVC (~1Gi), wired to an out-of-band Secret holding only `UPLOAD_TOKEN`.
 - **ArgoCD:** copy `deploy/argocd-application.yaml` into the pgk8s app-of-apps repo.
-- **Secret:** create with `kubectl create secret generic tremendous-cve` (see
-  `deploy/secret.example.yaml`).
+- **Secret:** `kubectl create secret generic tremendous-cve --from-literal=UPLOAD_TOKEN=...`
+  (see `deploy/secret.example.yaml`).
 
 ### Public exposure
 
-The app enforces bearer auth on `/generate` regardless of network exposure. To make the
-read paths (`/`, `/cve/*`) public, add an ingress rule for the chosen hostname to the
-"sab" Cloudflare tunnel in `terraform-cloudflare-config` (PGM-249).
+`POST /pages` enforces bearer auth regardless of network exposure. To make the read paths
+(`/`, `/cve/*`) public, add an ingress rule for the chosen hostname to the "sab" Cloudflare
+tunnel in `terraform-cloudflare-config` (PGM-249).
 
 ## Disclaimer
 

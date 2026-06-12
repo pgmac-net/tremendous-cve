@@ -8,10 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    anthropic_api_key: str = ""
-    generate_token: str = ""
+    upload_token: str = ""
     data_dir: str = "/data"
-    default_model: str = "sonnet"
 
 
 @lru_cache

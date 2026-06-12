@@ -9,9 +9,9 @@ replicaCount: 1
 
 env:
   DATA_DIR: /data
-  DEFAULT_MODEL: sonnet
 
-# Secret holding ANTHROPIC_API_KEY and GENERATE_TOKEN, created out-of-band.
+# Secret holding UPLOAD_TOKEN (bearer token for POST /pages), created out-of-band.
+# No Claude credentials live here — generation happens in the local CLI.
 existingSecret: tremendous-cve
 
 service:

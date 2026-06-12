@@ -1,36 +1,33 @@
-"""FastAPI application: generate and serve satirical CVE pages."""
+"""FastAPI application: store and serve satirical CVE pages.
+
+Generation happens in the CLI (tremendous_cve.cli); this app only accepts
+uploaded pages and serves them. No Claude dependency, no API key.
+"""
 
 import secrets
-from typing import Literal
 
-import anthropic
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, field_validator
 
 from tremendous_cve.config import Settings, get_settings
-from tremendous_cve.generator import generate_content
-from tremendous_cve.nvd import fetch_cve, parse_cve_id
-from tremendous_cve.render import PageStore, render_index, render_page
+from tremendous_cve.nvd import parse_cve_id
+from tremendous_cve.render import PageMeta, PageStore, render_index
 
 
-class GenerateRequest(BaseModel):
-    cve: str
-    model: Literal["sonnet", "opus"] | None = None
-    force: bool = False
+class UploadRequest(BaseModel):
+    cve_id: str
+    html: str
+    meta: PageMeta
 
-    @field_validator("cve")
+    @field_validator("cve_id")
     @classmethod
     def _valid_cve(cls, value: str) -> str:
         return parse_cve_id(value)
 
 
-def _anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
-    return anthropic.AsyncAnthropic(api_key=api_key)
-
-
 def _require_token(settings: Settings, authorization: str | None) -> None:
-    expected = settings.generate_token
+    expected = settings.upload_token
     provided = ""
     if authorization and authorization.startswith("Bearer "):
         provided = authorization.removeprefix("Bearer ")
@@ -63,30 +60,16 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"{normalised} not launched yet")
         return HTMLResponse(html)
 
-    @application.post("/generate")
-    async def generate(
-        request: GenerateRequest,
+    @application.post("/pages")
+    async def upload(
+        request: UploadRequest,
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         settings = get_settings()
         _require_token(settings, authorization)
-        cve_id = request.cve
-        pages = PageStore(settings.data_dir)
-
-        if pages.exists(cve_id) and not request.force:
-            return JSONResponse(
-                {"cve_id": cve_id, "url": f"/cve/{cve_id}", "cached": True}
-            )
-
-        cve = await fetch_cve(cve_id)
-        model = request.model or settings.default_model
-        client = _anthropic_client(settings.anthropic_api_key)
-        content = await generate_content(cve, model, client=client)
-        html = render_page(content, cve)
-        pages.save(cve_id, html, content, cve)
-        return JSONResponse(
-            {"cve_id": cve_id, "url": f"/cve/{cve_id}", "cached": False}
-        )
+        cve_id = request.cve_id
+        PageStore(settings.data_dir).save(cve_id, request.html, request.meta)
+        return JSONResponse({"cve_id": cve_id, "url": f"/cve/{cve_id}"})
 
     return application
 

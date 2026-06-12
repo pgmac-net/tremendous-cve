@@ -1,43 +1,33 @@
-
 import pytest
 from fastapi.testclient import TestClient
 
 from tremendous_cve import main
 from tremendous_cve.config import Settings
-from tremendous_cve.generator import PageContent
-from tremendous_cve.nvd import CveData
 
-CONTENT = PageContent(
-    title="LOG4SHELL",
-    tagline="Every JVM.",
-    severity_gag="11/10",
-    sections=[],
-)
-CVE = CveData(
-    cve_id="CVE-2021-44228", description="Log4j RCE", cvss_score=10.0, severity="CRITICAL"
-)
+META = {
+    "cve_id": "CVE-2021-44228",
+    "title": "LOG4SHELL",
+    "tagline": "Every JVM.",
+    "severity_gag": "11/10",
+    "cvss_score": 10.0,
+    "severity": "CRITICAL",
+    "model": "sonnet",
+    "generated_at": "2026-06-13T00:00:00Z",
+}
+HTML = "<html><body>LOG4SHELL</body></html>"
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    settings = Settings(
-        anthropic_api_key="test-key",
-        generate_token="secret-token",
-        data_dir=str(tmp_path),
-        default_model="sonnet",
-    )
+    settings = Settings(upload_token="secret-token", data_dir=str(tmp_path))
     monkeypatch.setattr(main, "get_settings", lambda: settings)
-
-    async def fake_fetch(cve_id):
-        return CVE.model_copy(update={"cve_id": cve_id})
-
-    async def fake_generate(cve, model, client):
-        return CONTENT
-
-    monkeypatch.setattr(main, "fetch_cve", fake_fetch)
-    monkeypatch.setattr(main, "generate_content", fake_generate)
-    monkeypatch.setattr(main, "_anthropic_client", lambda key: object())
     return TestClient(main.create_app())
+
+
+def _body(**overrides):
+    body = {"cve_id": "CVE-2021-44228", "html": HTML, "meta": META}
+    body.update(overrides)
+    return body
 
 
 class TestHealth:
@@ -45,33 +35,29 @@ class TestHealth:
         assert client.get("/healthz").status_code == 200
 
 
-class TestGenerateAuth:
+class TestUploadAuth:
     def test_missing_token_rejected(self, client):
-        resp = client.post("/generate", json={"cve": "CVE-2021-44228"})
+        resp = client.post("/pages", json=_body())
         assert resp.status_code == 401
 
     def test_wrong_token_rejected(self, client):
-        resp = client.post(
-            "/generate",
-            json={"cve": "CVE-2021-44228"},
-            headers={"Authorization": "Bearer nope"},
-        )
+        resp = client.post("/pages", json=_body(), headers={"Authorization": "Bearer nope"})
         assert resp.status_code == 401
 
-    def test_bad_cve_input_rejected(self, client):
+    def test_bad_cve_id_rejected(self, client):
         resp = client.post(
-            "/generate",
-            json={"cve": "not a cve"},
+            "/pages",
+            json=_body(cve_id="not a cve"),
             headers={"Authorization": "Bearer secret-token"},
         )
         assert resp.status_code == 422
 
 
-class TestGenerateFlow:
-    def test_generate_then_serve(self, client):
+class TestUploadFlow:
+    def test_upload_then_serve_and_index(self, client):
         resp = client.post(
-            "/generate",
-            json={"cve": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"},
+            "/pages",
+            json=_body(cve_id="https://nvd.nist.gov/vuln/detail/CVE-2021-44228"),
             headers={"Authorization": "Bearer secret-token"},
         )
         assert resp.status_code == 200
@@ -85,28 +71,14 @@ class TestGenerateFlow:
 
         index = client.get("/")
         assert "CVE-2021-44228" in index.text
+        assert "LOG4SHELL" in index.text
 
-    def test_cached_not_regenerated(self, client, monkeypatch):
+    def test_reupload_overwrites(self, client):
         headers = {"Authorization": "Bearer secret-token"}
-        client.post("/generate", json={"cve": "CVE-2021-44228"}, headers=headers)
-
-        async def boom(cve, model, client):
-            raise AssertionError("should not regenerate when cached")
-
-        monkeypatch.setattr(main, "generate_content", boom)
-        resp = client.post("/generate", json={"cve": "CVE-2021-44228"}, headers=headers)
-        assert resp.status_code == 200
-        assert resp.json()["cached"] is True
-
-    def test_force_regenerates(self, client, monkeypatch):
-        headers = {"Authorization": "Bearer secret-token"}
-        client.post("/generate", json={"cve": "CVE-2021-44228"}, headers=headers)
-        resp = client.post(
-            "/generate",
-            json={"cve": "CVE-2021-44228", "force": True},
-            headers=headers,
-        )
-        assert resp.json()["cached"] is False
+        client.post("/pages", json=_body(), headers=headers)
+        updated = _body(html="<html>UPDATED</html>")
+        client.post("/pages", json=updated, headers=headers)
+        assert "UPDATED" in client.get("/cve/CVE-2021-44228").text
 
 
 class TestServeMissing:
