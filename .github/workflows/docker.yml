@@ -1,0 +1,95 @@
+name: Docker Build & Push
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+  attestations: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
+      image-digest: ${{ steps.push.outputs.digest }}
+      full-image-ref: ${{ steps.tag.outputs.full-ref }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute image tag
+        id: tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          if [ "${REF_TYPE}" = "tag" ]; then
+            VERSION="${REF_NAME#v}"
+          elif [ "${EVENT_NAME}" = "pull_request" ]; then
+            VERSION="pr-${PR_NUMBER}-${SHORT_SHA}"
+          else
+            VERSION="${SHORT_SHA}"
+          fi
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "full-ref=macro.int.pgmac.net:5000/pg-tremendous-cve:${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx (remote BuildKit)
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: remote
+          endpoint: tcp://buildkitd.arc-runners.svc.cluster.local:1234
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            macro.int.pgmac.net:5000/pg-tremendous-cve:${{ steps.tag.outputs.tag }}
+            macro.int.pgmac.net:5000/pg-tremendous-cve:latest
+
+      - name: Attest Docker image
+        id: attest-image
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: macro.int.pgmac.net:5000/pg-tremendous-cve
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: false
+
+      - name: Write workflow summary
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "## Docker Build Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Image | \`macro.int.pgmac.net:5000/pg-tremendous-cve:${TAG}\` |"
+            if [ "${EVENT_NAME}" = "push" ]; then
+              echo "| Digest | \`${DIGEST}\` |"
+              echo "| Pushed | Yes |"
+            else
+              echo "| Pushed | No (PR build only) |"
+            fi
+            echo "| Commit | \`${COMMIT_SHA}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
