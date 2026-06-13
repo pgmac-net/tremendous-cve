@@ -1,6 +1,10 @@
 title: "TREMENDOUS CVE"
 description: "The HUGEST, most TREMENDOUS CVE pages in the history of computing. Probably ever."
 url: "https://tremendous-cve.pgmac.net.au"
+# Served at the custom-domain root, so no path prefix. Pin it explicitly: a build
+# that runs while Pages is a project site would otherwise bake in /tremendous-cve
+# and break every asset/link.
+baseurl: ""
 
 collections:
   cves:
