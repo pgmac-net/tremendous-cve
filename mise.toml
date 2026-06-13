@@ -1,7 +1,0 @@
-[tools]
-python = "3.12"
-uv = "latest"
-
-# Anthropic CLI — provides `ant` for `ant auth login` (Claude subscription auth
-# for the local generator CLI). Package is `anthropic-cli`; the binary is `ant`.
-"github:anthropics/anthropic-cli" = { version = "latest", exe = "ant" }

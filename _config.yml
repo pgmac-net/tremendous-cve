@@ -1,0 +1,27 @@
+title: "TREMENDOUS CVE"
+description: "The HUGEST, most TREMENDOUS CVE pages in the history of computing. Probably ever."
+url: "https://tremendous-cve.pgmac.net.au"
+
+collections:
+  cves:
+    output: true
+    permalink: /cve/:path/
+
+defaults:
+  - scope:
+      path: ""
+      type: cves
+    values:
+      layout: cve
+
+plugins:
+  - jekyll-feed
+
+# Keep build output lean and avoid leaking source/reference dirs into the site.
+exclude:
+  - reference/
+  - docs/
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - .claude/

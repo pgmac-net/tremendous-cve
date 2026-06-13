@@ -2,103 +2,65 @@
 
 The HUGEST, most TREMENDOUS CVE pages in the history of computing. Probably ever.
 
-Inspired by [bumsrake.de](https://bumsrake.de/), `tremendous-cve` takes a NIST NVD CVE
-report (URL or bare CVE ID) and uses the Claude API to generate a satirical
-product-launch page for it — hyperbolic campaign rhetoric on top, technically
-accurate vulnerability detail underneath.
+Inspired by [bumsrake.de](https://bumsrake.de/), this is a [Jekyll](https://jekyllrb.com/)
+site of satirical "product launch" pages for real CVEs — bombastic campaign-rally hype on
+top, technically accurate vulnerability detail underneath. Published to GitHub Pages at
+**https://tremendous-cve.pgmac.net.au**.
 
 ## How it works
 
-Generation runs **locally** (where you're authenticated to Claude); the web app only
-stores and serves what you upload — no Claude credentials in the cluster.
-
-1. `tremendous-cve generate <CVE-or-NVD-URL>` fetches CVE data from the
-   [NVD API 2.0](https://nvd.nist.gov/developers/vulnerabilities)
-2. Claude writes the satire as structured JSON (default Sonnet, `--model opus` selectable)
-3. The CLI renders the page through Jinja2 templates
-4. `--out PATH` previews locally; `--upload` POSTs the HTML + metadata to the web app
-5. The web app serves uploaded pages at `GET /cve/{cve_id}` and lists them at `/`
-
-```sh
-ant auth login            # one-time: use your Claude subscription (see CLI auth below)
-uv run tremendous-cve generate https://nvd.nist.gov/vuln/detail/CVE-2021-44228 \
-  --out /tmp/log4shell.html                       # preview
-uv run tremendous-cve generate CVE-2021-44228 \
-  --upload --url https://tremendous-cve.int.pgmac.net --token "$TOKEN"
+```
+operator → tremendous-cve skill (with a NIST NVD URL)
+  → Claude WebFetches the CVE, writes _cves/CVE-XXXX-XXXXX.md in the TREMENDOUS style
+  → opens a PR
+  → you merge to main
+  → GitHub Actions builds the Jekyll site → Pages artifact → deploys
+  → https://tremendous-cve.pgmac.net.au/cve/CVE-XXXX-XXXXX/
 ```
 
-## CLI authentication
+There is no server and no API key. Generation is done **manually** by running the
+[Claude Skill](.claude/skills/tremendous-cve/SKILL.md) inside this repo; the operator's own
+Claude session does the writing.
 
-The CLI calls Claude with a no-args `anthropic.AsyncAnthropic()`, which resolves
-credentials from the environment — `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an
-`ant auth login` profile. If you have an API key, just export it and skip `ant`.
+## Adding a CVE
 
-`ant` is the **Anthropic CLI** — a separate binary, not bundled with the `anthropic`
-Python SDK or Claude Code. The repo's `mise.toml` already pins it (along with `python` and
-`uv`), so the simplest path is:
+Run the `tremendous-cve` skill (Claude Code: ask Claude to use it, or invoke it directly)
+and give it a NIST NVD URL or CVE ID:
 
-```sh
-mise trust && mise install   # installs python, uv, and ant
-ant auth login               # browser OAuth; profile under ~/.config/anthropic/
-ant auth status              # confirm which credential/workspace won
+```
+use the tremendous-cve skill on https://nvd.nist.gov/vuln/detail/CVE-2021-44228
 ```
 
-Without mise, install `ant` directly:
+If you don't supply a URL, the skill prompts for one. It writes `_cves/<CVE-ID>.md`, opens a
+PR, and tells you the PR URL. Merge it to publish.
 
-```sh
-# Linux
-VERSION=$(curl -fsSL https://api.github.com/repos/anthropics/anthropic-cli/releases/latest \
-  | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
-curl -fsSL "https://github.com/anthropics/anthropic-cli/releases/download/v${VERSION}/ant_${VERSION}_$(uname -s | tr A-Z a-z)_$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/).tar.gz" \
-  | sudo tar -xz -C /usr/local/bin ant
+## Repo layout
 
-# macOS
-brew install anthropics/tap/ant && xattr -d com.apple.quarantine "$(brew --prefix)/bin/ant"
-
-# from source (Go 1.22+)
-go install github.com/anthropics/anthropic-cli/cmd/ant@latest
-```
-
-Caveats:
-
-- **Subscription OAuth may not grant API (`/v1/messages`) access.** It works for Claude
-  Code, but API message calls over a subscription token are gated by the
-  `oauth-2025-04-20` beta and aren't guaranteed for every tier. If `generate` returns
-  401/403 after a successful `ant auth login`, your subscription lacks API access — use a
-  real `ANTHROPIC_API_KEY`, or a Bedrock/Vertex backend, instead.
-- **A stale exported `ANTHROPIC_API_KEY` silently overrides the profile.** `ant auth
-  status` shows which source won; `unset ANTHROPIC_API_KEY` if a profile login "doesn't
-  take."
-
-## Development
-
-```sh
-uv sync
-uv run pytest
-uv run ruff check
-uv run pylint src/
-uv run uvicorn tremendous_cve.main:app --reload    # the serve-only web app
-```
-
-## Configuration
-
-### Web app (cluster)
-
-| Env var | Purpose |
+| Path | Purpose |
 |---|---|
-| `UPLOAD_TOKEN` | Bearer token required by `POST /pages` |
-| `DATA_DIR` | Where uploaded pages/metadata are stored (default `/data`) |
+| `.claude/skills/tremendous-cve/SKILL.md` | The translator skill (persona + steps) |
+| `_cves/*.md` | One satirical page per CVE (front matter + prose) |
+| `_layouts/{default,cve,home}.html` | Page chrome, CVE page, catalog |
+| `assets/css/style.scss` | The tremendous styling (Comic Sans, gold/red/blue) |
+| `index.html` | The satirical product catalog |
+| `_config.yml`, `Gemfile`, `CNAME` | Jekyll config, gems, custom domain |
+| `.github/workflows/pages.yml` | Build + deploy to GitHub Pages |
+| `reference/tremendous-style/` | Original Jinja2 templates + persona prompt (reference) |
 
-### CLI (local)
+## Local preview
 
-| Env var / flag | Purpose |
-|---|---|
-| `ANTHROPIC_API_KEY` / `ant auth login` | Claude auth (resolved by the SDK) |
-| `--url` / `TREMENDOUS_CVE_URL` | Web app base URL for `--upload` |
-| `--token` / `TREMENDOUS_CVE_TOKEN` | Upload bearer token (matches `UPLOAD_TOKEN`) |
-| `--model` / `TREMENDOUS_CVE_MODEL` | Claude model alias (default `sonnet`) |
+```sh
+bundle install
+bundle exec jekyll serve   # http://localhost:4000
+```
+
+## Custom domain
+
+`CNAME` pins `tremendous-cve.pgmac.net.au`. DNS is a Cloudflare `CNAME →
+pgmac-net.github.io` record (DNS-only / not proxied, so GitHub Pages can issue its
+certificate), managed in the `terraform-cloudflare-config` repo.
 
 ## Disclaimer
 
-The vulnerabilities are real. The merchandise is not. Every generated page links
-back to the genuine NVD entry.
+The vulnerabilities are real and every page links to the official NVD entry. The
+merchandise is not real. The satire targets marketing bombast, never victims.

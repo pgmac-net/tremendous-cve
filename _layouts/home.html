@@ -1,0 +1,32 @@
+---
+layout: default
+---
+<div class="banner">
+  <h1>👑 TREMENDOUS CVE 👑</h1>
+  <p class="tagline">The HUGEST vulnerability launch pages in the history of computing. Probably ever.</p>
+</div>
+<main>
+  {{ content }}
+  {% assign cves = site.cves | sort: "date" | reverse %}
+  {% if cves.size > 0 %}
+  <section>
+    <h2>🚀 OUR PRODUCT CATALOG</h2>
+    <table>
+      <tr><th>Launch</th><th>CVE</th><th>Their score</th><th>Our score</th></tr>
+      {% for cve in cves %}
+      <tr>
+        <td><a href="{{ cve.url | relative_url }}">{{ cve.title }}</a></td>
+        <td>{{ cve.cve_id }}</td>
+        <td>{% if cve.cvss_score %}{{ cve.cvss_score }}{% if cve.severity %} ({{ cve.severity }}){% endif %}{% else %}N/A{% endif %}</td>
+        <td>{{ cve.severity_gag }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% else %}
+  <section>
+    <h2>🚀 NO LAUNCHES YET</h2>
+    <p>Tremendous things are coming. The best things. Believe me.</p>
+  </section>
+  {% endif %}
+</main>

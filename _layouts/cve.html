@@ -1,0 +1,63 @@
+---
+layout: default
+---
+<div class="banner">
+  <h1>👑 {{ page.title }} 👑</h1>
+  <p class="tagline">{{ page.tagline }}</p>
+  <p class="marquee">🚨 {{ page.cve_id }} 🚨 OFFICIAL VULNERABILITY LAUNCH PAGE 🚨</p>
+</div>
+<main>
+  <div class="severity">SEVERITY: {{ page.severity_gag }}</div>
+
+  <section class="prose">
+    {{ content }}
+  </section>
+
+  <section>
+    <h2>📋 THE BORING (BUT 100% REAL) FACTS</h2>
+    <table>
+      <tr><th>CVE</th><td><a href="{{ page.nvd_url }}">{{ page.cve_id }}</a></td></tr>
+      {% if page.cvss_score %}
+      <tr><th>CVSS</th><td>{{ page.cvss_score }} ({{ page.severity }}) — a very low-energy score. We rate it {{ page.severity_gag }}.</td></tr>
+      {% endif %}
+      {% if page.cvss_vector %}
+      <tr><th>Vector</th><td>{{ page.cvss_vector }}</td></tr>
+      {% endif %}
+      {% if page.cwe %}
+      <tr><th>Weakness</th><td>{{ page.cwe | join: ", " }}</td></tr>
+      {% endif %}
+      {% if page.published %}
+      <tr><th>Published</th><td>{{ page.published }}</td></tr>
+      {% endif %}
+    </table>
+    {% if page.references and page.references.size > 0 %}
+    <p>References (all TREMENDOUS sources):</p>
+    <ul>
+      {% for ref in page.references limit: 8 %}
+      <li><a href="{{ ref }}">{{ ref }}</a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  {% if page.faq and page.faq.size > 0 %}
+  <section>
+    <h2>❓ FREQUENTLY ASKED QUESTIONS (THE BEST QUESTIONS)</h2>
+    {% for item in page.faq %}
+    <p><strong>Q: {{ item.q }}</strong><br>A: {{ item.a }}</p>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if page.merch and page.merch.size > 0 %}
+  <section>
+    <h2>🛒 OFFICIAL MERCHANDISE</h2>
+    <table>
+      <tr><th>Item</th><th>Price</th><th>Availability</th></tr>
+      {% for item in page.merch %}
+      <tr><td>{{ item.item }}</td><td>{{ item.price }}</td><td><span class="soldout">{{ item.status | default: "SOLD OUT" }}</span></td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endif %}
+</main>

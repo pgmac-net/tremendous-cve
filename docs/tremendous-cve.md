@@ -1,144 +1,108 @@
 # tremendous-cve
 
-Satirical CVE page generator. Takes a NIST NVD CVE report (URL or bare CVE ID) and uses
-the Claude API to produce a parody "product launch" page in the style of
-[bumsrake.de](https://bumsrake.de/) — hyperbolic campaign rhetoric on top, technically
-accurate vulnerability detail underneath.
+Satirical CVE page generator in the style of [bumsrake.de](https://bumsrake.de/). A Jekyll
+site of parody "product launch" pages for real CVEs, published to GitHub Pages at
+**https://tremendous-cve.pgmac.net.au**.
 
-## Architecture (split: local CLI + serve-only web app)
+## Architecture (Claude Skill → Jekyll → GitHub Pages)
 
-Generation runs **locally**, where the operator is authenticated to Claude. The web app
-holds no Claude credentials — it only stores and serves uploaded pages. This keeps a
-short-lived subscription token (or any API key) out of the cluster entirely.
+There is no running application and no API key. Translation is performed **manually** by an
+operator running a Claude Skill inside this repo; the operator's own Claude session writes
+the page. The repo is a static Jekyll site that GitHub Actions builds and deploys to Pages.
 
 ```
-LOCAL (authenticated to Claude):
-  tremendous-cve generate <CVE>
-    → NVD API 2.0 fetch → Claude (structured JSON) → Jinja2 render → HTML
-    → --out (preview)  and/or  --upload → POST /pages
-
-CLUSTER (no Claude credentials):
-  GET /              index of uploaded pages
-  GET /cve/{cve_id}  serve a stored page
-  POST /pages        bearer-token upload (HTML + meta)
-  GET /healthz       liveness/readiness
+operator runs the tremendous-cve skill (with a NIST NVD URL)
+  → Claude: WebFetch NVD CVE data -> write _cves/CVE-XXXX-XXXXX.md (front matter + prose)
+  → git branch + PR
+  → operator merges to main
+  → GitHub Actions (pages.yml): jekyll build -> Pages artifact -> deploy-pages
+  → https://tremendous-cve.pgmac.net.au/cve/CVE-XXXX-XXXXX/
 ```
 
-The model returns **structured JSON** (title, tagline, sections, severity gag, FAQ, merch),
-never raw HTML — keeping layout consistent and avoiding injection. Output is auto-escaped
-by Jinja2. Every page footer links the genuine NVD entry with a "satire but real vuln"
-disclaimer.
+Why this shape: the operator has no Anthropic API key (subscription OAuth doesn't reliably
+grant `/v1/messages`), so a programmatic generator isn't viable. A skill run in an
+already-authenticated Claude session sidesteps that entirely, and a static site removes all
+hosting/secret concerns.
 
-### Modules (`src/tremendous_cve/`)
+## The skill (`.claude/skills/tremendous-cve/SKILL.md`)
 
-| Module | Responsibility | Used by |
-|---|---|---|
-| `nvd.py` | CVE ID parsing + NVD API 2.0 client (403/429 retry) | CLI |
-| `generator.py` | `PageContent` schema, prompt, Claude JSON call, validation | CLI |
-| `render.py` | Jinja2 rendering, `PageMeta`/`build_meta`, on-disk `PageStore` | CLI + web |
-| `cli.py` | `tremendous-cve generate` — fetch → generate → render → upload | CLI |
-| `main.py` | FastAPI store-and-serve routes + bearer auth | web |
-| `config.py` | Web app env settings (`UPLOAD_TOKEN`, `DATA_DIR`) | web |
-| `styles/tremendous/` | Persona prompt + base/page/index templates | CLI + web |
+Steps Claude follows:
 
-The `styles/` package is structured so additional personas can be added later.
+1. Take a NIST NVD URL / CVE ID from the invocation; **if none, prompt the operator**.
+2. Resolve the CVE ID (`CVE-\d{4}-\d{4,}`, uppercased).
+3. WebFetch the CVE data — NVD API 2.0
+   (`https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=<id>`), falling back to the
+   detail page: description, CVSS score/vector/severity, CWE(s), references, published date.
+4. Write the satire in the TREMENDOUS persona (bombast over accurate mechanism; punch at
+   bombast, not victims).
+5. Create `_cves/<CVE-ID>.md` (front matter + markdown body).
+6. Branch, commit, push, open a PR with `gh`; report the PR URL.
 
-## CLI
+The persona is descended from `reference/tremendous-style/prompt.md`.
+
+## Page format
+
+Front matter carries metadata and the structured gags; the body is prose. The `cve` layout
+renders the chrome:
+
+```yaml
+---
+layout: cve
+cve_id: CVE-2021-44228
+title: "LOG4SHELL"
+tagline: "Every JVM on Earth. Tremendous reach."
+severity_gag: "11/10 PERFECT SCORE"
+cvss_score: 10.0
+severity: CRITICAL
+cvss_vector: "CVSS:3.1/..."
+cwe: ["CWE-502"]
+published: "2021-12-10"
+nvd_url: "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+references: ["https://logging.apache.org/log4j/2.x/security.html"]
+faq:
+  - { q: "Is this real?", a: "Unfortunately, yes." }
+merch:
+  - { item: "JNDI Lookup Tee", price: "$44.22", status: "SOLD OUT" }
+---
+## 🚀 WHAT WE'RE LAUNCHING
+...prose...
+```
+
+`_layouts/cve.html` renders: banner (title + tagline), severity-gag box, the prose body, a
+facts table (CVSS/vector/CWE/published + NVD link), FAQ, merch, and the "satire but the vuln
+is real" footer. `index.html` (`home` layout) loops `site.cves` as the product catalog.
+
+## Styling
+
+`assets/css/style.scss` — Comic Sans, gold `#FFD700` / red `#DC143C` / blue `#003F7F`, dashed
+gold borders, rotated severity box, merch table. A direct port of the original Jinja2
+templates kept in `reference/tremendous-style/`.
+
+## Build & deploy (`.github/workflows/pages.yml`)
+
+GitHub-hosted (`ubuntu-latest`), triggered on push to `main` (and `workflow_dispatch`):
+
+- **build:** `actions/configure-pages` → `actions/jekyll-build-pages` → `actions/upload-pages-artifact`
+- **deploy:** `actions/deploy-pages` into the `github-pages` environment
+
+One-time: enable Pages with build type `workflow`
+(`gh api repos/pgmac-net/tremendous-cve/pages -X POST -f build_type=workflow`).
+
+## Custom domain
+
+- `CNAME` file: `tremendous-cve.pgmac.net.au`.
+- DNS: a Cloudflare `cloudflare_dns_record` (provider v5) `CNAME tremendous-cve →
+  pgmac-net.github.io`, **DNS-only / not proxied** so GitHub Pages can issue its Let's
+  Encrypt certificate. Managed in `terraform-cloudflare-config`.
+
+## Local preview
 
 ```sh
-ant auth login   # one-time; uses your Claude subscription
-tremendous-cve generate <CVE-or-NVD-URL> [--model sonnet|opus] [--out PATH] \
-    [--upload --url <base> --token <token>]
+bundle install
+bundle exec jekyll serve   # http://localhost:4000
 ```
-
-The Claude client is constructed with no arguments, so the SDK resolves
-`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile from the
-environment. `--upload` reads `--url`/`--token` or `TREMENDOUS_CVE_URL`/`TREMENDOUS_CVE_TOKEN`.
-
-### Installing `ant` (Anthropic CLI)
-
-`ant` is a separate binary — not bundled with the `anthropic` Python SDK or Claude Code.
-Only needed if you authenticate via a Claude subscription rather than an API key.
-
-The repo's `mise.toml` pins `ant` (with `python` and `uv`), so the simplest path is:
-
-```sh
-mise trust && mise install   # installs python, uv, and ant
-```
-
-Without mise, install directly:
-
-```sh
-# Linux
-VERSION=$(curl -fsSL https://api.github.com/repos/anthropics/anthropic-cli/releases/latest \
-  | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
-curl -fsSL "https://github.com/anthropics/anthropic-cli/releases/download/v${VERSION}/ant_${VERSION}_$(uname -s | tr A-Z a-z)_$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/).tar.gz" \
-  | sudo tar -xz -C /usr/local/bin ant
-
-# macOS
-brew install anthropics/tap/ant && xattr -d com.apple.quarantine "$(brew --prefix)/bin/ant"
-
-# from source (Go 1.22+)
-go install github.com/anthropics/anthropic-cli/cmd/ant@latest
-
-ant auth login    # browser OAuth; profile under ~/.config/anthropic/
-ant auth status   # confirm which credential/workspace won
-```
-
-**Caveats:**
-
-- Subscription OAuth may not grant API (`/v1/messages`) access — it works for Claude Code,
-  but message calls over a subscription token are gated by the `oauth-2025-04-20` beta and
-  aren't guaranteed per tier. If `generate` returns 401/403 after login, use a real
-  `ANTHROPIC_API_KEY` or a Bedrock/Vertex backend instead.
-- A stale exported `ANTHROPIC_API_KEY` silently overrides the profile — `ant auth status`
-  shows which source won; `unset ANTHROPIC_API_KEY` if a profile login "doesn't take."
-
-## Web app routes
-
-| Route | Auth | Behaviour |
-|---|---|---|
-| `GET /` | public | Index listing uploaded pages |
-| `GET /cve/{cve_id}` | public | Serve a stored page; 404 (in style) if absent |
-| `POST /pages` | Bearer token | `{cve_id, html, meta}` — store an uploaded page |
-| `GET /healthz` | public | Liveness/readiness |
-
-## Configuration
-
-### Web app
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `UPLOAD_TOKEN` | — | Bearer token required by `POST /pages` |
-| `DATA_DIR` | `/data` | Storage for uploaded pages + metadata |
-
-### CLI
-
-| Env var / flag | Purpose |
-|---|---|
-| `ANTHROPIC_API_KEY` / `ant auth login` | Claude auth (resolved by the SDK) |
-| `--url` / `TREMENDOUS_CVE_URL` | Web app base URL for `--upload` |
-| `--token` / `TREMENDOUS_CVE_TOKEN` | Upload bearer token (matches `UPLOAD_TOKEN`) |
-| `--model` / `TREMENDOUS_CVE_MODEL` | Claude model alias (default `sonnet`) |
-
-## Deployment
-
-- **Image:** built in GitHub Actions (`.github/workflows/docker.yml`) via the pvek8s
-  remote BuildKit endpoint, pushed to `macro.int.pgmac.net:5000/pg-tremendous-cve`.
-  One image; the CLI is run locally, not in-cluster.
-- **Chart:** `chart/` — Deployment (1 replica, `Recreate` strategy because of RWO PVC),
-  Service, Ingress, PVC (~1Gi), wired to an out-of-band Secret holding only `UPLOAD_TOKEN`.
-- **ArgoCD:** copy `deploy/argocd-application.yaml` into the pgk8s app-of-apps repo.
-- **Secret:** `kubectl create secret generic tremendous-cve --from-literal=UPLOAD_TOKEN=...`
-  (see `deploy/secret.example.yaml`).
-
-### Public exposure
-
-`POST /pages` enforces bearer auth regardless of network exposure. To make the read paths
-(`/`, `/cve/*`) public, add an ingress rule for the chosen hostname to the "sab" Cloudflare
-tunnel in `terraform-cloudflare-config` (PGM-249).
 
 ## Disclaimer
 
 The vulnerabilities are real and every page links to the official NVD entry. The
-merchandise is not real. The satire is aimed at marketing bombast, never at victims.
+merchandise is not real. The satire targets marketing bombast, never victims.
