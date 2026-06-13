@@ -1,0 +1,85 @@
+---
+# Front matter (even empty) tells Jekyll to process this SCSS into CSS.
+---
+:root {
+  --gold: #FFD700;
+  --red: #DC143C;
+  --blue: #003F7F;
+}
+body {
+  font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", cursive;
+  background: var(--blue);
+  color: #fff;
+  margin: 0;
+  padding: 0 0 4em 0;
+}
+.banner {
+  background: repeating-linear-gradient(45deg, var(--red), var(--red) 40px, var(--blue) 40px, var(--blue) 80px);
+  border-bottom: 8px solid var(--gold);
+  text-align: center;
+  padding: 2em 1em;
+  text-shadow: 3px 3px 0 #000;
+}
+.banner h1 {
+  color: var(--gold);
+  font-size: 2.4em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.banner .tagline {
+  color: #fff;
+  font-size: 1.3em;
+  font-style: italic;
+  margin-top: 0.6em;
+}
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1em;
+}
+section {
+  background: rgba(0, 0, 0, 0.35);
+  border: 4px dashed var(--gold);
+  border-radius: 12px;
+  margin: 1.5em 0;
+  padding: 1em 1.5em;
+}
+h2 {
+  color: var(--gold);
+  text-shadow: 2px 2px 0 var(--red);
+}
+a { color: var(--gold); }
+pre, code {
+  background: #000;
+  color: #0f0;
+  font-family: monospace;
+}
+pre {
+  overflow-x: auto;
+  padding: 1em;
+  border: 2px solid var(--gold);
+}
+.severity {
+  background: var(--red);
+  border: 6px double var(--gold);
+  color: var(--gold);
+  font-size: 2em;
+  font-weight: bold;
+  margin: 1.5em auto;
+  max-width: 600px;
+  padding: 0.5em;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+  transform: rotate(-2deg);
+}
+table { width: 100%; border-collapse: collapse; }
+td, th { border: 2px solid var(--gold); padding: 0.5em; text-align: left; }
+.soldout { color: var(--red); font-weight: bold; background: var(--gold); padding: 0 0.4em; }
+footer {
+  border-top: 8px solid var(--gold);
+  margin-top: 3em;
+  padding: 1.5em;
+  text-align: center;
+  background: #000;
+}
+.marquee { color: var(--gold); font-weight: bold; }
