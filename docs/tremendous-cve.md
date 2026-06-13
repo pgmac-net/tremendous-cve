@@ -55,6 +55,45 @@ The Claude client is constructed with no arguments, so the SDK resolves
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile from the
 environment. `--upload` reads `--url`/`--token` or `TREMENDOUS_CVE_URL`/`TREMENDOUS_CVE_TOKEN`.
 
+### Installing `ant` (Anthropic CLI)
+
+`ant` is a separate binary — not bundled with the `anthropic` Python SDK or Claude Code.
+Only needed if you authenticate via a Claude subscription rather than an API key.
+
+The repo's `mise.toml` pins `ant` (with `python` and `uv`), so the simplest path is:
+
+```sh
+mise trust && mise install   # installs python, uv, and ant
+```
+
+Without mise, install directly:
+
+```sh
+# Linux
+VERSION=$(curl -fsSL https://api.github.com/repos/anthropics/anthropic-cli/releases/latest \
+  | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+curl -fsSL "https://github.com/anthropics/anthropic-cli/releases/download/v${VERSION}/ant_${VERSION}_$(uname -s | tr A-Z a-z)_$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/).tar.gz" \
+  | sudo tar -xz -C /usr/local/bin ant
+
+# macOS
+brew install anthropics/tap/ant && xattr -d com.apple.quarantine "$(brew --prefix)/bin/ant"
+
+# from source (Go 1.22+)
+go install github.com/anthropics/anthropic-cli/cmd/ant@latest
+
+ant auth login    # browser OAuth; profile under ~/.config/anthropic/
+ant auth status   # confirm which credential/workspace won
+```
+
+**Caveats:**
+
+- Subscription OAuth may not grant API (`/v1/messages`) access — it works for Claude Code,
+  but message calls over a subscription token are gated by the `oauth-2025-04-20` beta and
+  aren't guaranteed per tier. If `generate` returns 401/403 after login, use a real
+  `ANTHROPIC_API_KEY` or a Bedrock/Vertex backend instead.
+- A stale exported `ANTHROPIC_API_KEY` silently overrides the profile — `ant auth status`
+  shows which source won; `unset ANTHROPIC_API_KEY` if a profile login "doesn't take."
+
 ## Web app routes
 
 | Route | Auth | Behaviour |
