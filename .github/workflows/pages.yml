@@ -3,6 +3,8 @@ name: Build & Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -33,6 +35,8 @@ jobs:
 
   deploy:
     needs: build
+    # PRs only validate the build; deploy happens on push to main.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
